@@ -7,7 +7,7 @@ Turn a pasted job description and a company website into a research-backed inter
 - **Next.js 15 / React 19 / TypeScript**: one deployable app, with the Node.js route handlers providing the backend and the App Router providing protected pages.
 - **Tailwind CSS**: responsive interface, with a small set of project-specific CSS tokens for the visual system.
 - **Storage adapter**: local development and a single Node host can use `DATA_DIR/trao-store.json`; Vercel deployments use MongoDB via `MONGODB_URI`, since Vercel functions do not provide a persistent local disk. Both adapters keep accounts, kits, edits, generated/edited/pinned state, and practice scores.
-- **Gemini 2.0 Flash (optional)**: set `GEMINI_API_KEY` to enable model-assisted extraction and generation. The app uses a deterministic, source-constrained fallback when the key is absent or a provider call fails, so the batch command is runnable without a paid service or credential.
+- **Gemini Flash (optional)**: set `GEMINI_API_KEY` to enable model-assisted extraction and generation. `GEMINI_MODEL` defaults to `gemini-flash-latest`. The app uses a deterministic, source-constrained fallback when the key is absent or a provider call fails, so the batch command is runnable without a paid service or credential.
 
 The main pipeline is in `src/lib/pipeline.ts`; retrieval, model calls, schema/coverage/scheduling, authentication, and persistence are separate modules. Both the UI and `npm run evaluate` call this same pipeline.
 
@@ -26,7 +26,8 @@ Open <http://localhost:3000>, register an account, and build a kit. The environm
 - `SESSION_SECRET`: required in production; use a unique random value of at least 32 characters.
 - `DATA_DIR`: optional writable directory for the JSON store; defaults to `./data`. Mount persistent storage here when deployed.
 - `MONGODB_URI`: optional MongoDB connection string. Set this on Vercel (required there) to use persistent database storage; omit it for local JSON or a single Node host with persistent disk.
-- `GEMINI_API_KEY`: optional Gemini API key. Without it, the deterministic extraction and question fallback is used.
+- `GEMINI_API_KEY`: optional Gemini API key; send it only as a server-side environment variable, never in the browser or a committed file. Without it, the deterministic extraction and question fallback is used.
+- `GEMINI_MODEL`: optional Gemini model ID; defaults to `gemini-flash-latest`.
 
 To run automated tests and the production build:
 
@@ -82,7 +83,7 @@ docker volume create trao-data
 docker run -p 3000:3000 -e SESSION_SECRET="<unique-random-value-at-least-32-characters>" -e DATA_DIR=/data -v trao-data:/data trao-interview-prep
 ```
 
-For Vercel, import `KrutikaBorase/traoo` from the Vercel dashboard, add `SESSION_SECRET` and `MONGODB_URI` under project environment variables for Production, Preview, and Development as appropriate, then deploy. The MongoDB URI should target a database you control; add the database network access and application user through its provider dashboard. Never put the URI in a committed file. For another Node host, configure `SESSION_SECRET`, `DATA_DIR`, and optionally `GEMINI_API_KEY`; point `DATA_DIR` to the mounted persistent volume. A public URL and database require provisioning accounts and secrets, which are not included in this repository.
+For Vercel, import `KrutikaBorase/traoo` from the Vercel dashboard, add `SESSION_SECRET`, `MONGODB_URI`, and (if using model calls) `GEMINI_API_KEY` under project environment variables for Production, Preview, and Development as appropriate, then deploy. The MongoDB URI should target a database you control; add the database network access and application user through its provider dashboard. Never put secrets in committed files. For another Node host, configure `SESSION_SECRET`, `DATA_DIR`, and optionally `GEMINI_API_KEY`; point `DATA_DIR` to the mounted persistent volume. A public URL and database require provisioning accounts and secrets, which are not included in this repository.
 
 ## Design decisions and limitations
 

@@ -11,14 +11,19 @@ type JsonValue = Record<string, unknown>;
 async function generateJson(prompt: string): Promise<JsonValue | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  if (!/^[a-zA-Z0-9._-]+$/.test(model)) {
+    console.warn("[generation] GEMINI_MODEL is invalid; using deterministic fallback.");
+    return null;
+  }
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: "application/json", temperature: 0.2 },

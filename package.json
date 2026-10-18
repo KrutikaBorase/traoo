@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx --test src/lib/kit.test.ts src/lib/pipeline.test.ts src/lib/research.test.ts src/lib/store.test.ts scripts/evaluate.test.ts",
+    "test": "tsx --test src/lib/kit.test.ts src/lib/pipeline.test.ts src/lib/research.test.ts src/lib/store.test.ts src/lib/generation.test.ts scripts/evaluate.test.ts",
     "evaluate": "tsx scripts/evaluate.ts"
   },
   "dependencies": {
