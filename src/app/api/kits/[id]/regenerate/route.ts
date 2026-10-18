@@ -7,6 +7,7 @@ import { findKit, saveKit } from "@/lib/store";
 import type { InterviewKit, InterviewQuestion } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type Context = { params: Promise<{ id: string }> };
 type Category = InterviewQuestion["category"];
@@ -15,7 +16,7 @@ export async function POST(request: Request, context: Context) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: { code: "UNAUTHENTICATED", message: "Please sign in." } }, { status: 401 });
   const { id } = await context.params;
-  const stored = findKit(user.id, id);
+  const stored = await findKit(user.id, id);
   if (!stored) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Kit not found." } }, { status: 404 });
   try {
     const body = await request.json() as { section?: string; category?: Category };
@@ -77,7 +78,7 @@ export async function POST(request: Request, context: Context) {
     validateKit(kit);
     stored.kit = kit;
     stored.updatedAt = new Date().toISOString();
-    saveKit(stored);
+    await saveKit(stored);
     return NextResponse.json({ kit: stored });
   } catch (error) {
     return NextResponse.json({

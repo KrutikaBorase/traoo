@@ -12,7 +12,7 @@ export async function GET(_request: Request, context: Context) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: { code: "UNAUTHENTICATED", message: "Please sign in." } }, { status: 401 });
   const { id } = await context.params;
-  const kit = findKit(user.id, id);
+  const kit = await findKit(user.id, id);
   return kit
     ? NextResponse.json({ kit })
     : NextResponse.json({ error: { code: "NOT_FOUND", message: "Kit not found." } }, { status: 404 });
@@ -22,7 +22,7 @@ export async function PUT(request: Request, context: Context) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: { code: "UNAUTHENTICATED", message: "Please sign in." } }, { status: 401 });
   const { id } = await context.params;
-  const stored = findKit(user.id, id);
+  const stored = await findKit(user.id, id);
   if (!stored) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Kit not found." } }, { status: 404 });
   try {
     const body = await request.json() as { kit?: InterviewKit; questionState?: StoredState; flashcardState?: StoredState };
@@ -34,7 +34,7 @@ export async function PUT(request: Request, context: Context) {
       flashcardState: body.flashcardState ?? stored.flashcardState,
       updatedAt: new Date().toISOString(),
     };
-    saveKit(updated);
+    await saveKit(updated);
     return NextResponse.json({ kit: updated });
   } catch (error) {
     return NextResponse.json({
@@ -49,6 +49,6 @@ export async function DELETE(_request: Request, context: Context) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: { code: "UNAUTHENTICATED", message: "Please sign in." } }, { status: 401 });
   const { id } = await context.params;
-  if (!deleteKit(user.id, id)) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Kit not found." } }, { status: 404 });
+  if (!await deleteKit(user.id, id)) return NextResponse.json({ error: { code: "NOT_FOUND", message: "Kit not found." } }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

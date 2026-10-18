@@ -44,7 +44,7 @@ export async function POST(request: Request) {
               createdAt: now,
               updatedAt: now,
             };
-            saveKit(stored);
+            await saveKit(stored);
             send({ type: "case_complete", caseId: id, stored });
           } catch (error) {
             send({

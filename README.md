@@ -6,7 +6,7 @@ Turn a pasted job description and a company website into a research-backed inter
 
 - **Next.js 15 / React 19 / TypeScript**: one deployable app, with the Node.js route handlers providing the backend and the App Router providing protected pages.
 - **Tailwind CSS**: responsive interface, with a small set of project-specific CSS tokens for the visual system.
-- **Local JSON persistence**: a deliberately dependency-light store at `DATA_DIR/trao-store.json` keeps accounts, kits, edits, generated/edited/pinned state, and practice scores together. This is suitable for a single Node instance with persistent disk; use a persistent volume in production. It is not a multi-instance database.
+- **Storage adapter**: local development and a single Node host can use `DATA_DIR/trao-store.json`; Vercel deployments use MongoDB via `MONGODB_URI`, since Vercel functions do not provide a persistent local disk. Both adapters keep accounts, kits, edits, generated/edited/pinned state, and practice scores.
 - **Gemini 2.0 Flash (optional)**: set `GEMINI_API_KEY` to enable model-assisted extraction and generation. The app uses a deterministic, source-constrained fallback when the key is absent or a provider call fails, so the batch command is runnable without a paid service or credential.
 
 The main pipeline is in `src/lib/pipeline.ts`; retrieval, model calls, schema/coverage/scheduling, authentication, and persistence are separate modules. Both the UI and `npm run evaluate` call this same pipeline.
@@ -25,6 +25,7 @@ Open <http://localhost:3000>, register an account, and build a kit. The environm
 
 - `SESSION_SECRET`: required in production; use a unique random value of at least 32 characters.
 - `DATA_DIR`: optional writable directory for the JSON store; defaults to `./data`. Mount persistent storage here when deployed.
+- `MONGODB_URI`: optional MongoDB connection string. Set this on Vercel (required there) to use persistent database storage; omit it for local JSON or a single Node host with persistent disk.
 - `GEMINI_API_KEY`: optional Gemini API key. Without it, the deterministic extraction and question fallback is used.
 
 To run automated tests and the production build:
@@ -61,7 +62,7 @@ The retrieval bot identifies itself as `TraoInterviewPrepBot/1.0`, waits between
 
 The kit remains in the Appendix A shape; `source.skipped_sources` and `source.discussion_results` are additive research metadata. UI metadata lives alongside it in the stored record: each question and flashcard is marked `generated`, `edited`, or `pinned`. Inline edits save automatically. Regenerating a question category retains edited and pinned questions and flashcards, refreshes generated questions and their generated flashcards only in that category, and keeps unaffected-category card IDs and practice scores. Regenerating the company brief or schedule changes only that section. Practice records one confidence score (1–5) and timestamp per flashcard; the next practice round sorts unseen and lower-confidence cards first.
 
-Generation emits newline-delimited progress events and saves only after the complete kit passes schema validation. An unfinished request reports a structured error and does not create a partial saved kit. The UI disables duplicate submissions while busy; the backend also fingerprints a user's normalized job description, company URL, and day count so a completed or in-flight identical request reuses the existing generation. A single Node process shares simultaneous identical requests; this mechanism is intentionally not a distributed job queue.
+Generation emits newline-delimited progress events and saves only after the complete kit passes schema validation. An unfinished request reports a structured error and does not create a partial saved kit. The UI disables duplicate submissions while busy; the backend fingerprints a user's normalized job description, company URL, and day count so a completed identical request reuses its saved kit. Simultaneous identical requests share work within one process; MongoDB's unique owner/fingerprint index prevents duplicate saved records across instances, though separate instances may still do duplicate generation work.
 
 ## Authentication and security
 
@@ -71,7 +72,7 @@ External URLs reject non-HTTP(S) schemes and embedded credentials. Production re
 
 ## Deploy
 
-Build and start the app with `npm run build` and `npm start`, then set `SESSION_SECRET`, `DATA_DIR`, and optionally `GEMINI_API_KEY` in the host's secret/environment settings. Attach persistent storage at `DATA_DIR`. The app combines frontend and backend in one Node service, so both are reachable from its public URL. Do not commit `.env` or the data directory.
+Build and start the app with `npm run build` and `npm start`, then set `SESSION_SECRET` and either `MONGODB_URI` or `DATA_DIR` in the host's secret/environment settings. Use MongoDB for Vercel; attach persistent storage at `DATA_DIR` for a single Node host. The app combines frontend and backend in one Node service, so both are reachable from its public URL. Do not commit `.env`, database credentials, or the data directory.
 
 For a Docker host, build the included image and mount a persistent volume at `/data`:
 
@@ -81,15 +82,15 @@ docker volume create trao-data
 docker run -p 3000:3000 -e SESSION_SECRET="<unique-random-value-at-least-32-characters>" -e DATA_DIR=/data -v trao-data:/data trao-interview-prep
 ```
 
-The public Git repository can also be connected to a Node hosting service that supports persistent volumes. Configure `SESSION_SECRET`, `DATA_DIR`, and optionally `GEMINI_API_KEY` in the host's secret settings; point `DATA_DIR` to the mounted persistent volume. A live URL requires provisioning the host and its persistent storage; those account credentials are not part of this repository.
+For Vercel, import `KrutikaBorase/traoo` from the Vercel dashboard, add `SESSION_SECRET` and `MONGODB_URI` under project environment variables for Production, Preview, and Development as appropriate, then deploy. The MongoDB URI should target a database you control; add the database network access and application user through its provider dashboard. Never put the URI in a committed file. For another Node host, configure `SESSION_SECRET`, `DATA_DIR`, and optionally `GEMINI_API_KEY`; point `DATA_DIR` to the mounted persistent volume. A public URL and database require provisioning accounts and secrets, which are not included in this repository.
 
 ## Design decisions and limitations
 
-- JSON storage avoids making a database service or key a prerequisite for cloning and running the required batch command, but is appropriate only for a single process/instance and modest local data.
+- JSON storage avoids making a database service or key a prerequisite for cloning and running the required batch command. It is suitable only for a single process/instance with durable disk; MongoDB is the persistent adapter for serverless hosting.
 - The model is optional to keep evaluation repeatable and credential-free. The fallback intentionally prefers an honest thin kit over inferred requirements; it is less nuanced than the model-assisted path.
 - The external discussion search may be unavailable or return noisy results; no discussion result is treated as authoritative evidence.
 - Robots rules and DNS checks reduce retrieval risk; as with ordinary hostname-based HTTP clients, a production deployment should additionally use outbound network controls to protect against DNS rebinding and provider-specific egress behavior.
-- The file store requires one persistent Node instance and is not suitable for horizontally scaled/serverless hosting. The per-process duplicate-request guard is likewise not a distributed lock.
+- The JSON file store requires one persistent Node instance and is not suitable for horizontally scaled/serverless hosting. MongoDB is required on Vercel; its process-local duplicate-request guard reduces duplicate work only within one instance.
 
 ## Submission walkthrough
 

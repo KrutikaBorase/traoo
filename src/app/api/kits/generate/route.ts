@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       };
       void (async () => {
         try {
-          const existing = findKitByFingerprint(user.id, fingerprint);
+          const existing = await findKitByFingerprint(user.id, fingerprint);
           if (existing) {
             send({ type: "progress", step: "Opening the matching saved kit" });
             send({ type: "complete", kit: existing });
@@ -61,8 +61,14 @@ export async function POST(request: Request) {
                 createdAt: now,
                 updatedAt: now,
               };
-              saveKit(stored);
-              return stored;
+              try {
+                await saveKit(stored);
+                return stored;
+              } catch (error) {
+                const duplicate = await findKitByFingerprint(user.id, fingerprint);
+                if (duplicate) return duplicate;
+                throw error;
+              }
             })();
             activeGenerations.set(generationKey, generation);
           }

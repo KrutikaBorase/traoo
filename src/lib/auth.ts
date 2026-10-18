@@ -35,28 +35,27 @@ export function signInToken(userId: string): string {
   return `${payload}.${signature(payload)}`;
 }
 
-function verifyToken(token: string): string | null {
+async function verifyToken(token: string): Promise<{ id: string; email: string } | null> {
   const [payload, supplied, extra] = token.split(".");
   if (!payload || !supplied || extra) return null;
   const expected = Buffer.from(signature(payload));
   const actual = Buffer.from(supplied);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+  let decoded: { sub?: string; exp?: number };
   try {
-    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { sub?: string; exp?: number };
-    if (typeof decoded.sub !== "string" || typeof decoded.exp !== "number" || decoded.exp <= Date.now() / 1000) return null;
-    return findUserById(decoded.sub)?.id ?? null;
+    decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { sub?: string; exp?: number };
   } catch {
     return null;
   }
+  if (typeof decoded.sub !== "string" || typeof decoded.exp !== "number" || decoded.exp <= Date.now() / 1000) return null;
+  const user = await findUserById(decoded.sub);
+  return user ? { id: user.id, email: user.email } : null;
 }
 
 export async function currentUser(): Promise<{ id: string; email: string } | null> {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
-  const id = verifyToken(token);
-  if (!id) return null;
-  const user = findUserById(id);
-  return user ? { id: user.id, email: user.email } : null;
+  return verifyToken(token);
 }
 
 export async function setSessionCookie(userId: string): Promise<void> {

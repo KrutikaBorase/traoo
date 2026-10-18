@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (action === "register") {
     const salt = newPasswordSalt();
     try {
-      createUser({
+      await createUser({
         id: randomUUID(),
         email,
         passwordHash: passwordHash(password, salt),
@@ -44,12 +44,13 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
+      if (!(error instanceof Error) || error.message !== "An account with this email already exists.") throw error;
       return NextResponse.json({
         error: { code: "ACCOUNT_EXISTS", message: error instanceof Error ? error.message : "Could not create account." },
       }, { status: 409 });
     }
   } else {
-    const user = findUserByEmail(email);
+    const user = await findUserByEmail(email);
     if (!user || !verifyPassword(password, user.salt, user.passwordHash)) {
       return NextResponse.json({ error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." } }, { status: 401 });
     }
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ user: { id: user.id, email: user.email } });
   }
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user) {
     return NextResponse.json({ error: { code: "ACCOUNT_UNAVAILABLE", message: "Account creation did not complete." } }, { status: 500 });
   }
