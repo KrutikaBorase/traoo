@@ -1,4 +1,5 @@
 import type {
+  Flashcard,
   InterviewKit,
   InterviewQuestion,
   Requirement,
@@ -86,7 +87,12 @@ export function validateKit(value: unknown): asserts value is InterviewKit {
     !Number.isInteger(source.jd_chars) ||
     typeof source.researched_at !== "string" ||
     !Array.isArray(source.pages_used) ||
-    !source.pages_used.every((url) => typeof url === "string")
+    !source.pages_used.every((url) => typeof url === "string") ||
+    (source.skipped_sources !== undefined &&
+      (!Array.isArray(source.skipped_sources) ||
+        !source.skipped_sources.every((url) => typeof url === "string"))) ||
+    (source.discussion_results !== undefined &&
+      (!Number.isInteger(source.discussion_results) || source.discussion_results < 0))
   ) throw new Error("Kit source fields do not match the required structure");
   if (
     typeof kit.company_brief?.summary !== "string" ||
@@ -184,4 +190,49 @@ export function makeSchedule(
   days: number,
 ): StudyDay[] {
   return allocateSchedule(questions, requirements, days);
+}
+
+export function refreshGeneratedFlashcards(
+  questions: InterviewQuestion[],
+  previousQuestions: InterviewQuestion[],
+  previousFlashcards: Flashcard[],
+  questionState: Record<string, "generated" | "edited" | "pinned">,
+  flashcardState: Record<string, "generated" | "edited" | "pinned">,
+  regeneratedCategory: InterviewQuestion["category"],
+): {
+  flashcards: Flashcard[];
+  flashcardState: Record<string, "generated" | "edited" | "pinned">;
+} {
+  const questionForCard = (card: Flashcard) => previousQuestions.find(
+    (question) => question.prompt === card.front && question.answer_outline === card.back,
+  );
+  const retained = previousFlashcards.filter((card) => {
+    if (flashcardState[card.id] !== "generated") return true;
+    const previousQuestion = questionForCard(card);
+    if (!previousQuestion) return false;
+    const currentQuestion = questions.find((question) => question.id === previousQuestion.id);
+    return Boolean(
+      currentQuestion &&
+      (previousQuestion.category !== regeneratedCategory ||
+        questionState[previousQuestion.id] === "edited" ||
+        questionState[previousQuestion.id] === "pinned"),
+    );
+  });
+  const nextState = Object.fromEntries(
+    retained.map((card) => [card.id, flashcardState[card.id] ?? "generated"]),
+  ) as Record<string, "generated" | "edited" | "pinned">;
+  let nextId = Math.max(0, ...previousFlashcards.map((card) => Number(card.id.slice(1)) || 0)) + 1;
+
+  for (const question of questions) {
+    if (question.category !== regeneratedCategory || questionState[question.id] !== "generated") continue;
+    const card: Flashcard = {
+      id: `f${nextId++}`,
+      front: question.prompt,
+      back: question.answer_outline,
+      requirement_ids: question.requirement_ids,
+    };
+    retained.push(card);
+    nextState[card.id] = "generated";
+  }
+  return { flashcards: retained, flashcardState: nextState };
 }

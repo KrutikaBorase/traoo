@@ -29,7 +29,7 @@ function isPrivateAddress(address: string): boolean {
   );
 }
 
-export async function validateExternalUrl(raw: string): Promise<URL> {
+function parseExternalUrl(raw: string): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -39,6 +39,11 @@ export async function validateExternalUrl(raw: string): Promise<URL> {
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
     throw new Error("Company URL must use HTTP(S) and cannot contain credentials.");
   }
+  return url;
+}
+
+export async function validateExternalUrl(raw: string): Promise<URL> {
+  const url = parseExternalUrl(raw);
   if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) {
     if (process.env.NODE_ENV === "production") throw new Error("Localhost URLs are not allowed in production.");
     return url;
@@ -164,9 +169,14 @@ async function fetchWithRetry(url: URL): Promise<Response> {
           target = new URL(location, target);
           continue;
         }
+        if (response.status === 429 || response.status >= 500) {
+          lastError = new Error(`Temporary HTTP ${response.status} while fetching ${target.href}.`);
+          await response.body?.cancel();
+          break;
+        }
         return response;
       }
-      throw new Error("Too many redirects.");
+      if (!lastError) throw new Error("Too many redirects.");
     } catch (error) {
       lastError = error;
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
@@ -175,13 +185,14 @@ async function fetchWithRetry(url: URL): Promise<Response> {
   throw lastError instanceof Error ? lastError : new Error("Page fetch failed.");
 }
 
-async function robotsFor(origin: string): Promise<string> {
+async function robotsFor(origin: string): Promise<string | null> {
   try {
     const response = await fetchWithRetry(new URL("/robots.txt", origin));
-    if (!response.ok || !response.headers.get("content-type")?.includes("text/plain")) return "";
+    if (response.status === 404 || response.status === 410) return "";
+    if (!response.ok || !response.headers.get("content-type")?.includes("text/plain")) return null;
     return await readBounded(response, 100_000);
   } catch {
-    return "";
+    return null;
   }
 }
 
@@ -211,9 +222,15 @@ export async function crawlCompanySite(companyUrl: string): Promise<{
   pages: ResearchPage[];
   skipped: string[];
 }> {
-  const start = await validateExternalUrl(companyUrl);
+  const start = parseExternalUrl(companyUrl);
   start.hash = "";
   const robots = await robotsFor(start.origin);
+  if (robots === null) {
+    return {
+      pages: [],
+      skipped: [new URL("/robots.txt", start.origin).href, start.href],
+    };
+  }
   const pages: ResearchPage[] = [];
   const skipped: string[] = [];
   const homepage = await fetchPage(start, robots, "home");
@@ -246,7 +263,7 @@ export async function searchInterviewDiscussion(company: string): Promise<Resear
   const url = new URL(`https://html.duckduckgo.com/html/?q=${query}`);
   try {
     const robots = await robotsFor(url.origin);
-    if (!robotsAllows(robots, url.pathname)) return [];
+    if (robots === null || !robotsAllows(robots, url.pathname)) return [];
     const response = await fetchWithRetry(url);
     if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return [];
     const html = await readBounded(response, MAX_PAGE_BYTES);

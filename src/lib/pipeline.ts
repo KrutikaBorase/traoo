@@ -13,6 +13,15 @@ function validateCase(input: CaseInput): void {
   if (typeof input.id !== "string" || !input.id.trim() || input.id.length > 100) throw new Error("Case id must be a non-empty string.");
   if (typeof input.jd !== "string" || input.jd.length > 30_000) throw new Error("jd must be a string no longer than 30,000 characters.");
   if (typeof input.company_url !== "string" || input.company_url.length > 2_000) throw new Error("company_url must be a valid URL string.");
+  let companyUrl: URL;
+  try {
+    companyUrl = new URL(input.company_url);
+  } catch {
+    throw new Error("company_url must be a valid absolute URL.");
+  }
+  if (!["http:", "https:"].includes(companyUrl.protocol) || companyUrl.username || companyUrl.password) {
+    throw new Error("company_url must use HTTP(S) and cannot contain credentials.");
+  }
   if (!Number.isInteger(input.days) || input.days < 1 || input.days > 60) throw new Error("days must be an integer between 1 and 60.");
 }
 
@@ -82,6 +91,8 @@ export async function buildKit(
       jd_chars: input.jd.length,
       researched_at: new Date().toISOString(),
       pages_used: allResearch.map((page) => page.url),
+      skipped_sources: research.skipped,
+      discussion_results: discussions.length,
     },
     company_brief: {
       summary: brief.summary,

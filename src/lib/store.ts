@@ -61,6 +61,10 @@ export function findKit(ownerId: string, id: string): StoredKit | undefined {
   return readStore().kits.find((kit) => kit.ownerId === ownerId && kit.id === id);
 }
 
+export function findKitByFingerprint(ownerId: string, fingerprint: string): StoredKit | undefined {
+  return readStore().kits.find((kit) => kit.ownerId === ownerId && kit.inputFingerprint === fingerprint);
+}
+
 export function saveKit(kit: StoredKit): void {
   const data = readStore();
   const index = data.kits.findIndex((entry) => entry.id === kit.id && entry.ownerId === kit.ownerId);

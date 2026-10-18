@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allocateSchedule, uncoveredRequirements, validateKit } from "./kit";
-import type { InterviewKit, InterviewQuestion, Requirement } from "./types";
+import { allocateSchedule, refreshGeneratedFlashcards, uncoveredRequirements, validateKit } from "./kit";
+import type { Flashcard, InterviewKit, InterviewQuestion, Requirement } from "./types";
 
 const requirements: Requirement[] = [
   { id: "r1", text: "Build secure APIs", kind: "technical", priority: "must" },
@@ -69,4 +69,34 @@ test("structure validator rejects uncovered must-have requirements", () => {
   invalid.questions = [questions[0]];
   invalid.schedule.days = allocateSchedule(invalid.questions, requirements, 3);
   assert.throws(() => validateKit(invalid), /Coverage must report/);
+});
+
+test("regenerating a question category preserves edits and generated cards in other categories", () => {
+  const previousCards: Flashcard[] = [
+    { id: "f1", front: questions[0].prompt, back: questions[0].answer_outline, requirement_ids: ["r1"] },
+    { id: "f2", front: questions[1].prompt, back: questions[1].answer_outline, requirement_ids: ["r2"] },
+    { id: "f3", front: "Personal notes", back: "Keep this card", requirement_ids: ["r1"] },
+  ];
+  const regeneratedQuestion: InterviewQuestion = {
+    id: "q4",
+    requirement_ids: ["r1"],
+    category: "technical",
+    prompt: "A fresh API question?",
+    answer_outline: "A fresh answer outline.",
+    difficulty: 2,
+  };
+  const result = refreshGeneratedFlashcards(
+    [questions[1], regeneratedQuestion],
+    [questions[0], questions[1]],
+    previousCards,
+    { q1: "generated", q2: "generated", q4: "generated" },
+    { f1: "generated", f2: "generated", f3: "edited" },
+    "technical",
+  );
+
+  assert.deepEqual(result.flashcards.map((card) => card.id), ["f2", "f3", "f4"]);
+  assert.equal(result.flashcards[0].front, questions[1].prompt);
+  assert.equal(result.flashcards[1].back, "Keep this card");
+  assert.equal(result.flashcards[2].front, regeneratedQuestion.prompt);
+  assert.deepEqual(result.flashcardState, { f2: "generated", f3: "edited", f4: "generated" });
 });

@@ -87,6 +87,7 @@ export function Dashboard({ email }: { email: string }) {
     setBusy(true);
     setError("");
     setProgress("Reading your batch file…");
+    const failures: string[] = [];
     try {
       const cases = JSON.parse(await batchFile.text()) as unknown;
       await readStream(await fetch("/api/kits/batch", {
@@ -96,10 +97,11 @@ export function Dashboard({ email }: { email: string }) {
       }), (item) => {
         if (item.type === "progress" && item.step) setProgress(item.step);
         if (item.type === "case_complete" && item.stored) setKits((previous) => [item.stored!, ...previous]);
-        if (item.type === "case_error") setError(`${item.caseId ?? "A case"}: ${item.error?.message ?? "generation failed"}`);
-        if (item.type === "error") setError(item.error?.message ?? "Batch generation failed.");
+        if (item.type === "case_error") failures.push(`${item.caseId ?? "A case"}: ${item.error?.message ?? "generation failed"}`);
+        if (item.type === "error") failures.push(item.error?.message ?? "Batch generation failed.");
       });
       setBatchFile(null);
+      if (failures.length) setError(failures.join("\n"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not process the batch file.");
     } finally {

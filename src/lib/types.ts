@@ -45,6 +45,8 @@ export interface InterviewKit {
     jd_chars: number;
     researched_at: string;
     pages_used: string[];
+    skipped_sources?: string[];
+    discussion_results?: number;
   };
   company_brief: {
     summary: string;
@@ -87,6 +89,7 @@ export interface ResearchPage {
 export interface StoredKit {
   id: string;
   ownerId: string;
+  inputFingerprint?: string;
   title: string;
   kit: InterviewKit;
   questionState: Record<string, "generated" | "edited" | "pinned">;

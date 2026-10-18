@@ -42,6 +42,8 @@ test("pipeline crawls company links and produces a covered, correctly sized kit 
     });
     assert.equal(kit.schedule.days.length, 5);
     assert.ok(kit.source.pages_used.some((url) => url.endsWith("/careers/process")));
+    assert.deepEqual(kit.source.skipped_sources, []);
+    assert.equal(kit.source.discussion_results, 0);
     assert.ok(kit.role.requirements.length >= 2);
     assert.deepEqual(kit.coverage.uncovered_requirement_ids, []);
     assert.equal(kit.coverage.passes, 2);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { generateQuestionsForRequirements, categoryFor, summarizeCompany } from "@/lib/generation";
-import { allocateSchedule, uncoveredRequirements, validateKit } from "@/lib/kit";
+import { allocateSchedule, refreshGeneratedFlashcards, uncoveredRequirements, validateKit } from "@/lib/kit";
 import { crawlCompanySite } from "@/lib/research";
 import { findKit, saveKit } from "@/lib/store";
 import type { InterviewKit, InterviewQuestion } from "@/lib/types";
@@ -20,6 +20,7 @@ export async function POST(request: Request, context: Context) {
   try {
     const body = await request.json() as { section?: string; category?: Category };
     const kit: InterviewKit = structuredClone(stored.kit);
+    const previousQuestions = structuredClone(kit.questions);
     if (body.section === "company_brief") {
       const research = await crawlCompanySite(kit.source.company_url);
       const brief = await summarizeCompany(kit.source.company, research.pages);
@@ -27,6 +28,7 @@ export async function POST(request: Request, context: Context) {
         ...brief,
         sources: research.pages.map((page) => page.url),
       };
+      kit.source.skipped_sources = research.skipped;
     } else if (body.section === "questions") {
       if (!["technical", "behavioural", "system-design", "company-fit"].includes(body.category ?? "")) {
         throw new Error("Choose a valid question category.");
@@ -54,14 +56,18 @@ export async function POST(request: Request, context: Context) {
         question.id,
         preserved.some((item) => item.id === question.id) ? stored.questionState[question.id] : "generated",
       ]));
+      const refreshed = refreshGeneratedFlashcards(
+        kit.questions,
+        previousQuestions,
+        kit.flashcards,
+        stored.questionState,
+        stored.flashcardState,
+        category,
+      );
+      kit.flashcards = refreshed.flashcards;
+      stored.flashcardState = refreshed.flashcardState;
       kit.coverage.uncovered_requirement_ids = uncoveredRequirements(kit.role.requirements, kit.questions);
       kit.schedule.days = allocateSchedule(kit.questions, kit.role.requirements, kit.schedule.days_available);
-      kit.flashcards = kit.questions.map((question, index) => ({
-        id: stored.kit.flashcards.find((card) => stored.flashcardState[card.id] !== "generated" && card.requirement_ids.some((req) => question.requirement_ids.includes(req)))?.id ?? `f${index + 1}`,
-        front: question.prompt,
-        back: question.answer_outline,
-        requirement_ids: question.requirement_ids,
-      }));
     } else if (body.section === "schedule") {
       kit.schedule.days = allocateSchedule(kit.questions, kit.role.requirements, kit.schedule.days_available);
     } else {
